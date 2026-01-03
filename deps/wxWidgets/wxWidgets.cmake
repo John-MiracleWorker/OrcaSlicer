@@ -31,7 +31,7 @@ orcaslicer_add_cmake_project(
     DEPENDS ${PNG_PKG} ${ZLIB_PKG} ${EXPAT_PKG} ${JPEG_PKG}
     ${_wx_flatpak_patch}
     CMAKE_ARGS
-        -DwxBUILD_PRECOMP=ON
+        -DwxBUILD_PRECOMP=OFF
         ${_wx_toolkit}
         "-DCMAKE_DEBUG_POSTFIX:STRING=${_wx_debug_postfix}"
         -DwxBUILD_DEBUG_LEVEL=0

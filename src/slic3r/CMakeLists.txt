@@ -22,6 +22,18 @@ set(SLIC3R_GUI_SOURCES
     GUI/Widgets/FilamentLoad.hpp
     GUI/AboutDialog.cpp
     GUI/AboutDialog.hpp
+    GUI/AICore.cpp
+    GUI/AICore.hpp
+    GUI/AIPrintMonitor.cpp
+    GUI/AIPrintMonitor.hpp
+    GUI/AIDiagnoseDialog.cpp
+    GUI/AIDiagnoseDialog.hpp
+    GUI/AISupportDialog.cpp
+    GUI/AISupportDialog.hpp
+    GUI/AITunerDialog.cpp
+    GUI/AITunerDialog.hpp
+    GUI/LocalModelClient.cpp
+    GUI/LocalModelClient.hpp
     GUI/AmsMappingPopup.cpp
     GUI/AmsMappingPopup.hpp
     GUI/AMSMaterialsSetting.cpp
@@ -162,6 +174,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/Gizmos/GLGizmosCommon.hpp
     GUI/Gizmos/GLGizmoSeam.cpp
     GUI/Gizmos/GLGizmoSeam.hpp
+    GUI/GeminiClient.cpp
+    GUI/GeminiClient.hpp
     GUI/Gizmos/GLGizmoSimplify.cpp
     GUI/Gizmos/GLGizmoSimplify.hpp
     #GUI/Gizmos/GLGizmoSlaSupports.cpp
