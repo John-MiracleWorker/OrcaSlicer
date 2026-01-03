@@ -39,13 +39,23 @@ echo "Architecture: $ARCH"
 # Run the official build script
 # Assuming this script is in the root directory
 chmod +x ./build_release_macos.sh
-./build_release_macos.sh -a "$ARCH"
+./build_release_macos.sh -a "$ARCH" -x
 
 echo "============================================="
 echo "   Build Complete!"
 echo "============================================="
-echo "You can find the application in:"
-echo "  build/$ARCH/OrcaSlicer/OrcaSlicer.app"
+
+APP_PATH="$PWD/build/$ARCH/OrcaSlicer/OrcaSlicer.app"
+DESKTOP_PATH="$HOME/Desktop/OrcaSlicer.app"
+
+echo "Creating Desktop shortcut..."
+if [ -L "$DESKTOP_PATH" ]; then
+    rm "$DESKTOP_PATH"
+fi
+ln -s "$APP_PATH" "$DESKTOP_PATH"
+
+echo "You can find the application on your Desktop!"
+echo "  $DESKTOP_PATH"
 echo ""
 echo "To run it:"
-echo "  open build/$ARCH/OrcaSlicer/OrcaSlicer.app"
+echo "  open $DESKTOP_PATH"

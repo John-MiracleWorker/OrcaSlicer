@@ -71,4 +71,13 @@ echo =============================================
 echo    Build Complete!
 echo =============================================
 echo You can find the executable in the 'build/OrcaSlicer/Release' (or similar) folder.
+
+set TARGET=%CD%\build\OrcaSlicer\Release\OrcaSlicer.exe
+set SHORTCUT=%USERPROFILE%\Desktop\OrcaSlicer.lnk
+set PWS=powershell.exe -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command
+
+echo Creating Desktop shortcut...
+%PWS% "$s=(New-Object -COM WScript.Shell).CreateShortcut('%SHORTCUT%');$s.TargetPath='%TARGET%';$s.Save()"
+
+echo Shortcut created on Desktop: %SHORTCUT%
 pause
