@@ -200,6 +200,10 @@ void GeminiClient::analyze_print_failure(const std::string& image_data, SuccessC
                                 "- \"reason\": string (short description) "
                                 "- \"confidence\": float (0.0 to 1.0) "
                                 "- \"severity\": string (\"low\", \"medium\", \"high\", \"critical\") "
+                                "- \"suggested_actions\": array of objects [{ \"action\": string, \"value\": number, \"reason\": string }] "
+                                "Possible actions: \"set_fan_speed\" (0-255), \"set_nozzle_temp\" (C), \"set_bed_temp\" (C), "
+                                "\"set_speed_factor\" (%), \"set_flow_rate\" (%). "
+                                "Only suggest actions if you are >80% confident they will help. "
                                 "If the print looks fine (or empty bed but no mess), return failure_detected: false.";
 
     std::stringstream ss;

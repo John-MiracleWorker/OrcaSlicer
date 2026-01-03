@@ -165,23 +165,83 @@ void AIPrintMonitor::on_analysis_success(const std::string& response)
         BOOST_LOG_TRIVIAL(info) << "AI Analysis: " << response;
 
         // Simple heuristic for JSON in text
+        // Simple heuristic for JSON in text
         if (response.find("\"failure_detected\": true") != std::string::npos) {
             BOOST_LOG_TRIVIAL(warning) << "AI DETECTED FAILURE! Pausing print.";
-
-            // Trigger Pause
-            // Must run on Main Thread?
-            // Logic in DeviceManager usually requires main thread?
-            // command_task_pause calls network agent, which might be thread safe or not.
-            // Best to use wxCallAfter.
-
             wxGetApp().CallAfter([this]() {
                 if (m_device_manager && m_device_manager->get_selected_machine()) {
                     m_device_manager->get_selected_machine()->command_task_pause();
-
-                    // Optional: Notify user
                     wxMessageBox("AI Monitor detected a print failure and paused the print.", "AI Monitor Alert", wxICON_ERROR);
                 }
             });
+        }
+
+        // AI Active Adjustment Parsing
+        // We look for "suggested_actions"
+        // Since we are doing a lazy text search for MVP (proper JSON parsing is hard with just headers available in this context without
+        // full deps check) Let's assume we can use the property tree if the response IS valid JSON. We already loaded it into 'pt' above!
+
+        // Extract content from Gemini response structure usually: candidates[0].content.parts[0].text
+        // But our previous log output shows we might need to drill down.
+        // For MVP, assuming `response` IS the JSON text from the model (depends on how GeminiClient processes it).
+        // GeminiClient usually returns full API JSON.
+        // Let's look at GeminiClient.cpp: it returns `readBuffer` which is the FULL JSON response.
+
+        try {
+            // Traverse ptree to get text
+            if (pt.count("candidates")) {
+                for (auto& candidate : pt.get_child("candidates")) {
+                    if (candidate.second.count("content") && candidate.second.get_child("content").count("parts")) {
+                        for (auto& part : candidate.second.get_child("content.parts")) {
+                            if (part.second.count("text")) {
+                                std::string ai_text = part.second.get<std::string>("text");
+
+                                // Now parse the AI text as JSON (it might be wrapped in ```json ... ```)
+                                size_t json_start = ai_text.find("{");
+                                size_t json_end   = ai_text.rfind("}");
+                                if (json_start != std::string::npos && json_end != std::string::npos) {
+                                    std::string                 json_str = ai_text.substr(json_start, json_end - json_start + 1);
+                                    std::stringstream           ss_inner(json_str);
+                                    boost::property_tree::ptree pt_inner;
+                                    boost::property_tree::read_json(ss_inner, pt_inner);
+
+                                    // Check for actions
+                                    if (pt_inner.count("suggested_actions")) {
+                                        for (auto& action : pt_inner.get_child("suggested_actions")) {
+                                            std::string act_type = action.second.get<std::string>("action");
+                                            float       value    = action.second.get<float>("value");
+
+                                            wxGetApp().CallAfter([this, act_type, value]() {
+                                                if (m_device_manager && m_device_manager->get_selected_machine()) {
+                                                    auto machine = m_device_manager->get_selected_machine();
+                                                    if (act_type == "set_fan_speed") {
+                                                        int val = std::clamp((int) value, 0, 255);
+                                                        machine->publish_gcode(wxString::Format("M106 S%d\n", val).ToStdString());
+                                                    } else if (act_type == "set_nozzle_temp") {
+                                                        int val = std::clamp((int) value, 0, 280); // Safety limit
+                                                        machine->command_set_nozzle(val);
+                                                    } else if (act_type == "set_bed_temp") {
+                                                        int val = std::clamp((int) value, 0, 110); // Safety limit
+                                                        machine->command_set_bed(val);
+                                                    } else if (act_type == "set_speed_factor") {
+                                                        int val = std::clamp((int) value, 10, 200);
+                                                        machine->publish_gcode(wxString::Format("M220 S%d\n", val).ToStdString());
+                                                    } else if (act_type == "set_flow_rate") {
+                                                        int val = std::clamp((int) value, 50, 150);
+                                                        machine->publish_gcode(wxString::Format("M221 S%d\n", val).ToStdString());
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (std::exception& e) {
+            BOOST_LOG_TRIVIAL(error) << "AI Monitor: Error parsing actions: " << e.what();
         }
 
     } catch (...) {

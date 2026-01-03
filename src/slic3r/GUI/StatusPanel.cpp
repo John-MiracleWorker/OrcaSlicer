@@ -1442,7 +1442,7 @@ wxBoxSizer* StatusBasePanel::create_monitoring_page()
 
     // AI Print Monitor Controls
     bSizer_monitoring_title->AddStretchSpacer();
-    m_staticText_ai_monitoring = new wxStaticText(m_panel_monitoring_title, wxID_ANY, _L("AI Guard"), wxDefaultPosition, wxDefaultSize, 0);
+    m_staticText_ai_monitoring = new Label(m_panel_monitoring_title, _L("AI Guard"));
     m_staticText_ai_monitoring->Wrap(-1);
     m_staticText_ai_monitoring->SetForegroundColour(PAGE_TITLE_FONT_COL);
     bSizer_monitoring_title->Add(m_staticText_ai_monitoring, 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(5));
@@ -1470,8 +1470,8 @@ wxBoxSizer* StatusBasePanel::create_monitoring_page()
     bSizer_monitoring_title->Add(m_bmToggleBtn_ai_monitoring, 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(5));
 
     // m_bitmap_camera_img = new wxStaticBitmap(m_panel_monitoring_title, wxID_ANY, m_bitmap_camera , wxDefaultPosition, wxSize(FromDIP(32),
-    // FromDIP(18)), 0); m_bitmap_camera_img->SetMinSize(wxSize(FromDIP(32), FromDIP(18))); bSizer_monitoring_title->Add(m_bitmap_camera_img,
-    // 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(5));
+    // FromDIP(18)), 0); m_bitmap_camera_img->SetMinSize(wxSize(FromDIP(32), FromDIP(18)));
+    // bSizer_monitoring_title->Add(m_bitmap_camera_img, 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(5));
 
     m_bitmap_sdcard_img = new wxStaticBitmap(m_panel_monitoring_title, wxID_ANY, wxNullBitmap, wxDefaultPosition,
                                              wxSize(FromDIP(38), FromDIP(24)), 0);
