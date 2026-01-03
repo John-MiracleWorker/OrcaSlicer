@@ -20,20 +20,36 @@ echo.
 echo Checking for CMake...
 where cmake >nul 2>nul
 if %errorlevel% neq 0 (
-    echo Error: CMake not found in PATH.
-    echo Please install CMake from https://cmake.org/download/
+    echo CMake not found. Attempting to install via Winget...
+    winget install Kitware.CMake -e --source winget
+    if %errorlevel% neq 0 (
+        echo Error: Failed to install CMake. Please install manually from https://cmake.org/download/
+        pause
+        exit /b 1
+    )
+    echo CMake installed. Please restart the script to refresh PATH.
     pause
-    exit /b 1
+    exit /b 0
+) else (
+    echo CMake is already installed.
 )
 
 echo.
 echo Checking for Git...
 where git >nul 2>nul
 if %errorlevel% neq 0 (
-    echo Error: Git not found in PATH.
-    echo Please install Git from https://git-scm.com/downloads
+    echo Git not found. Attempting to install via Winget...
+    winget install Git.Git -e --source winget
+    if %errorlevel% neq 0 (
+        echo Error: Failed to install Git. Please install manually from https://git-scm.com/downloads
+        pause
+        exit /b 1
+    )
+    echo Git installed. Please restart the script to refresh PATH.
     pause
-    exit /b 1
+    exit /b 0
+) else (
+    echo Git is already installed.
 )
 
 echo.

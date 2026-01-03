@@ -18,7 +18,15 @@ fi
 
 # 2. Install Dependencies
 echo "Checking dependencies..."
-brew install cmake git ninja autoconf automake libtool zstd gettext
+DEPS=(cmake git ninja autoconf automake libtool zstd gettext)
+for dep in "${DEPS[@]}"; do
+    if ! command -v $dep &> /dev/null; then
+        echo "Installing $dep..."
+        brew install $dep
+    else
+        echo "$dep is already installed."
+    fi
+done
 
 # 3. Build OrcaSlicer
 echo "Starting Build Process..."
