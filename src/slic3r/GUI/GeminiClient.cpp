@@ -220,4 +220,43 @@ void GeminiClient::analyze_print_failure(const std::string& image_data, SuccessC
     perform_request(ss.str(), on_success, on_error);
 }
 
+void GeminiClient::analyze_text(const std::string& prompt, SuccessCallback on_success, ErrorCallback on_error)
+{
+    if (m_api_key.empty()) {
+        if (on_error)
+            on_error("API Key is missing. Please set it in the Settings tab.");
+        return;
+    }
+
+    auto json_escape = [](const std::string& s) {
+        std::ostringstream o;
+        for (auto c = s.cbegin(); c != s.cend(); c++) {
+            if (*c == '"')
+                o << "\\\"";
+            else if (*c == '\\')
+                o << "\\\\";
+            else if (*c == '\n')
+                o << "\\n";
+            else if (*c == '\r')
+                o << "\\r";
+            else if (*c == '\t')
+                o << "\\t";
+            else if ('\x00' <= *c && *c <= '\x1f')
+                o << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int) *c;
+            else
+                o << *c;
+        }
+        return o.str();
+    };
+
+    std::stringstream ss;
+    ss << "{";
+    ss << "\"contents\": [{ \"parts\": [";
+    ss << "{ \"text\": \"" << json_escape(prompt) << "\" }";
+    ss << "] }]";
+    ss << "}";
+
+    perform_request(ss.str(), on_success, on_error);
+}
+
 }} // namespace Slic3r::GUI

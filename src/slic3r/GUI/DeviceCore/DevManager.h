@@ -53,6 +53,7 @@ public:
     void stop_refresher();
 
     MachineObject* get_selected_machine();
+    std::string    get_selected_machine_id() const { return selected_machine; }
     bool           set_selected_machine(std::string dev_id);
 
     // local machine

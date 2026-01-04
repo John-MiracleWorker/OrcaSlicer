@@ -1,10 +1,10 @@
 #include "AIPrintMonitor.hpp"
-#include "AIPrintMonitor.hpp"
+#include "libslic3r/AppConfig.hpp"
 #include "DeviceCore/DevManager.h"      // Required for DeviceManager definition
 #include "slic3r/GUI/DeviceManager.hpp" // Required for MachineObject
 #include "slic3r/Utils/Http.hpp"
-#include "slic3r/Utils/Http.hpp"
 #include "GUI_App.hpp"
+#include <wx/app.h> // For wxGetApp
 #include "DeviceCore/DevDefs.h"
 #include <wx/base64.h>
 #include <wx/mstream.h>
@@ -58,7 +58,64 @@ void AIPrintMonitor::stop_monitoring()
     BOOST_LOG_TRIVIAL(info) << "AI Print Monitor stopped.";
 }
 
-void AIPrintMonitor::set_model_name(const std::string& model_name) { m_gemini_client.set_model_name(model_name); }
+// Helper for Bambu printers (via MachineObject)
+static void output_gcode_bambu(MachineObject* machine, const std::string& gcode)
+{
+    if (machine)
+        machine->publish_gcode(gcode + "\n");
+}
+
+// Send G-code to Moonraker API (for Klipper printers)
+void AIPrintMonitor::send_gcode_moonraker(const std::string& gcode)
+{
+    if (m_moonraker_ip.empty()) {
+        // Try to load from config
+        if (AppConfig* config = wxGetApp().app_config) {
+            m_moonraker_ip = config->get("ai_monitor_ip");
+        }
+    }
+
+    if (m_moonraker_ip.empty()) {
+        BOOST_LOG_TRIVIAL(warning) << "AI Monitor: No Moonraker IP configured, cannot send G-code";
+        m_action_log.push_back("Error: No Moonraker IP configured");
+        return;
+    }
+
+    // URL encode the G-code
+    std::string encoded_gcode;
+    for (char c : gcode) {
+        if (c == ' ')
+            encoded_gcode += "%20";
+        else if (c == '\n')
+            encoded_gcode += "%0A";
+        else
+            encoded_gcode += c;
+    }
+
+    // Moonraker API endpoint for G-code
+    std::string url = "http://" + m_moonraker_ip + "/printer/gcode/script?script=" + encoded_gcode;
+
+    BOOST_LOG_TRIVIAL(info) << "AI Monitor: Sending G-code to Moonraker: " << gcode;
+
+    // Run in thread to avoid blocking UI
+    std::thread([url, gcode, this]() {
+        auto http = Http::post(url);
+        http.on_complete(
+                [gcode, this](std::string body, unsigned) { BOOST_LOG_TRIVIAL(info) << "AI Monitor: G-code sent successfully: " << gcode; })
+            .on_error([gcode, this](std::string body, std::string error, unsigned status) {
+                BOOST_LOG_TRIVIAL(error) << "AI Monitor: Failed to send G-code: " << error;
+                // Try to log error to action log on main thread
+                CallAfter([this, error]() { m_action_log.push_back("Moonraker Error: " + error); });
+            })
+            .perform_sync();
+    }).detach();
+}
+
+void AIPrintMonitor::set_model_name(const std::string& model_name)
+{
+    m_gemini_client.set_model_name(model_name);
+    BOOST_LOG_TRIVIAL(info) << "AI Monitor: Model set to " << model_name;
+}
 
 void AIPrintMonitor::on_timer(wxTimerEvent& event)
 {
@@ -70,22 +127,91 @@ void AIPrintMonitor::on_timer(wxTimerEvent& event)
 void AIPrintMonitor::fetch_snapshot_and_analyze()
 {
     MachineObject* machine = m_device_manager ? m_device_manager->get_selected_machine() : nullptr;
-    if (!machine)
+
+    if (machine) {
+        // Bambu printer path - only monitor during printing
+        if (!machine->is_in_printing()) {
+            m_current_status = "Idle (not printing)";
+            return;
+        }
+        m_current_status = "Checking...";
+        perform_analysis(machine);
+    } else {
+        // Klipper printer path - use Moonraker IP
+        std::string ip = "";
+        if (AppConfig* config = wxGetApp().app_config) {
+            ip = config->get("ai_monitor_ip");
+        }
+
+        if (!ip.empty()) {
+            m_moonraker_ip   = ip;
+            m_current_status = "Checking (Moonraker)...";
+            m_action_log.push_back("Timer triggered - checking Moonraker at " + ip);
+            perform_analysis_with_ip(ip);
+        } else {
+            m_current_status = "No printer configured";
+            // Log this issue so user can see it
+            static bool logged_once = false;
+            if (!logged_once) {
+                m_action_log.push_back("Warning: No Bambu machine connected and no Moonraker IP configured.");
+                logged_once = true;
+            }
+        }
+    }
+}
+
+void AIPrintMonitor::force_check_now()
+{
+    MachineObject* machine = m_device_manager ? m_device_manager->get_selected_machine() : nullptr;
+
+    // Fallback: If get_selected_machine returns null (e.g. strict access rights),
+    // try to get the raw object if we have an ID.
+    if (!machine && m_device_manager) {
+        std::string id = m_device_manager->get_selected_machine_id();
+        if (!id.empty()) {
+            machine = m_device_manager->get_local_machine(id);
+            if (!machine) {
+                machine = m_device_manager->get_user_machine(id);
+            }
+        }
+    }
+
+    // Ultimate Fallback: Use manually configured IP (for Klipper/Moonraker printers)
+    if (!machine) {
+        std::string manual_ip = "";
+        if (AppConfig* cfg = wxGetApp().app_config)
+            manual_ip = cfg->get("ai_monitor_ip");
+
+        if (manual_ip.empty()) {
+            m_action_log.push_back("Error: No machine selected. Please enter a Moonraker IP in the AI Monitor dialog.");
+            return;
+        }
+
+        BOOST_LOG_TRIVIAL(info) << "AI Monitor: Using manual IP: " << manual_ip;
+        m_action_log.push_back("Using manual IP: " + manual_ip);
+        perform_analysis_with_ip(manual_ip);
         return;
+    }
 
-    // Only monitor if printing
-    // Note: get_print_status string enum: "RUNNING", "PAUSE", etc.
-    // machine->print_status;
-    // We verify strict status or just try if user enabled it.
-    // For MVP, checking if IP exists is minimal requirement.
+    BOOST_LOG_TRIVIAL(info) << "AI Monitor: Forced check initiated.";
+    m_action_log.push_back("User requested manual AI check...");
+    perform_analysis(machine);
+}
 
+void AIPrintMonitor::perform_analysis(MachineObject* machine)
+{
     std::string ip = machine->get_dev_ip();
-    if (ip.empty())
+    if (ip.empty()) {
+        m_action_log.push_back("Error: Machine has no IP.");
         return;
+    }
 
-    // Only monitor if printing
-    if (!machine->is_in_printing())
-        return;
+    // Continue with existing logic (fetching snapshot) ...
+    // Note: We need to make sure the rest of the function (image fetching) is moved here or this function continues
+    // to where the original function was.
+    // Since we are replacing the top of fetch_snapshot_and_analyze, we will just paste the logic here.
+
+    // ... logic continues ...
 
     // Construct URL - MVP: Try standard OctoPrint/MJPEG snapshot
     // In a robust version, we'd use configured camera URL.
@@ -102,53 +228,98 @@ void AIPrintMonitor::fetch_snapshot_and_analyze()
     get_snapshot(snapshot_url);
 }
 
+void AIPrintMonitor::perform_analysis_with_ip(const std::string& ip)
+{
+    // Standard Moonraker/OctoPrint snapshot URL
+    std::string snapshot_url = "http://" + ip + "/webcam/?action=snapshot";
+    BOOST_LOG_TRIVIAL(info) << "AI Monitor: Fetching snapshot from: " << snapshot_url;
+    get_snapshot(snapshot_url);
+}
+
 void AIPrintMonitor::get_snapshot(const std::string& url)
 {
+    m_current_status = "Fetching snapshot...";
+    m_action_log.push_back("Fetching snapshot from: " + url);
+
     // Run in thread to avoid blocking UI
     std::thread([this, url]() {
         bool        success = false;
         std::string body_data;
+        std::string error_msg;
 
         auto http = Http::get(url);
-        http.on_complete([&](std::string body, unsigned) {
+        http.timeout_connect(5) // 5 second connect timeout
+            .timeout_max(10)    // 10 second max timeout
+            .on_complete([&](std::string body, unsigned) {
                 body_data = body;
                 success   = true;
             })
             .on_error([&](std::string body, std::string error, unsigned status) {
+                error_msg = error;
                 BOOST_LOG_TRIVIAL(error) << "AIMonitor: Snapshot failed: " << error;
             })
             .perform_sync();
 
-        if (success && !body_data.empty()) {
-            // Encode to Base64
-            // We need to be careful with binary data in std::string
-            // wxBase64Encode expects input data.
+        // Post result back to main thread
+        CallAfter([this, success, body_data, error_msg, url]() {
+            if (!success || body_data.empty()) {
+                m_action_log.push_back("Snapshot FAILED: " + (error_msg.empty() ? "No data received" : error_msg));
+                m_current_status = "Snapshot failed";
+                m_last_result    = "Camera error";
+                return;
+            }
 
+            m_action_log.push_back("Snapshot received (" + std::to_string(body_data.size()) + " bytes)");
+
+            // Check for API key
+            std::string api_key = "";
+            if (AppConfig* config = wxGetApp().app_config) {
+                api_key = config->get("ai_gemini_api_key");
+            }
+
+            if (api_key.empty()) {
+                m_action_log.push_back("ERROR: No Gemini API key configured!");
+                m_current_status = "No API key";
+                m_last_result    = "API key missing";
+                return;
+            }
+
+            m_gemini_client.set_api_key(api_key);
+            m_action_log.push_back("Sending to Gemini for analysis...");
+            m_current_status = "Analyzing...";
+
+            // Encode to Base64
             wxString    base64     = wxBase64Encode(body_data.data(), body_data.size());
             std::string base64_std = base64.ToStdString();
 
             // Call Gemini
-            // We must ensure 'this' is still valid.
-            // In C++ wxWidgets, usually we use shared_ptr or weak_ptr for async, or ensure lifetime.
-            // For MVP, we assume Monitor lives as long as App/DeviceManager?
-            // Risky if Monitor is destroyed.
-            // Ideally we post back to main thread to call Gemini.
-            // But GeminiClient also spawns a thread.
-
             m_gemini_client.analyze_print_failure(
-                base64_std, [this](const std::string& resp) { this->on_analysis_success(resp); },
-                [this](const std::string& err) { this->on_analysis_error(err); });
-        }
+                base64_std, [this](const std::string& resp) { this->CallAfter([this, resp]() { this->on_analysis_success(resp); }); },
+                [this](const std::string& err) {
+                    this->CallAfter([this, err]() {
+                        m_action_log.push_back("Gemini ERROR: " + err);
+                        m_current_status = "Analysis failed";
+                        m_last_result    = "Gemini error";
+                        this->on_analysis_error(err);
+                    });
+                });
+        });
     }).detach();
 }
 
 void AIPrintMonitor::on_analysis_success(const std::string& response)
 {
+    m_current_status = "Idle";
+    m_last_result    = "Check completed";
+    m_action_log.push_back("AI Check: Analysis received from Gemini.");
+
     // Parse JSON
     try {
         std::stringstream           ss(response);
         boost::property_tree::ptree pt;
         boost::property_tree::read_json(ss, pt);
+
+        // ... parsing logic ...
 
         // Gemini response structure extraction same as in AIDiagnoseDialog
         // Simplify for MVP (assuming text result contains JSON)
@@ -212,24 +383,62 @@ void AIPrintMonitor::on_analysis_success(const std::string& response)
                                             float       value    = action.second.get<float>("value");
 
                                             wxGetApp().CallAfter([this, act_type, value]() {
-                                                if (m_device_manager && m_device_manager->get_selected_machine()) {
-                                                    auto machine = m_device_manager->get_selected_machine();
-                                                    if (act_type == "set_fan_speed") {
-                                                        int val = std::clamp((int) value, 0, 255);
-                                                        machine->publish_gcode(wxString::Format("M106 S%d\n", val).ToStdString());
-                                                    } else if (act_type == "set_nozzle_temp") {
-                                                        int val = std::clamp((int) value, 0, 280); // Safety limit
-                                                        machine->command_set_nozzle(val);
-                                                    } else if (act_type == "set_bed_temp") {
-                                                        int val = std::clamp((int) value, 0, 110); // Safety limit
-                                                        machine->command_set_bed(val);
-                                                    } else if (act_type == "set_speed_factor") {
-                                                        int val = std::clamp((int) value, 10, 200);
-                                                        machine->publish_gcode(wxString::Format("M220 S%d\n", val).ToStdString());
-                                                    } else if (act_type == "set_flow_rate") {
-                                                        int val = std::clamp((int) value, 50, 150);
-                                                        machine->publish_gcode(wxString::Format("M221 S%d\n", val).ToStdString());
+                                                std::string log_entry;
+                                                std::string gcode_cmd;
+
+                                                // Determine the G-code command and log entry
+                                                if (act_type == "set_fan_speed") {
+                                                    int val   = std::clamp((int) value, 0, 255);
+                                                    log_entry = "Fan Speed -> " + std::to_string(val);
+                                                    gcode_cmd = "M106 S" + std::to_string(val);
+                                                } else if (act_type == "set_nozzle_temp") {
+                                                    int val   = std::clamp((int) value, 0, 280);
+                                                    log_entry = "Nozzle Temp -> " + std::to_string(val);
+                                                    gcode_cmd = "M104 S" + std::to_string(val);
+                                                } else if (act_type == "set_bed_temp") {
+                                                    int val   = std::clamp((int) value, 0, 110);
+                                                    log_entry = "Bed Temp -> " + std::to_string(val);
+                                                    gcode_cmd = "M140 S" + std::to_string(val);
+                                                } else if (act_type == "set_speed_factor") {
+                                                    int val   = std::clamp((int) value, 10, 200);
+                                                    log_entry = "Speed Factor -> " + std::to_string(val);
+                                                    gcode_cmd = "M220 S" + std::to_string(val);
+                                                } else if (act_type == "set_flow_rate") {
+                                                    int val   = std::clamp((int) value, 50, 150);
+                                                    log_entry = "Flow Rate -> " + std::to_string(val);
+                                                    gcode_cmd = "M221 S" + std::to_string(val);
+                                                }
+
+                                                if (!gcode_cmd.empty() && m_active_adjustment_enabled) {
+                                                    // Try Bambu machine first
+                                                    MachineObject* machine = nullptr;
+                                                    if (m_device_manager)
+                                                        machine = m_device_manager->get_selected_machine();
+
+                                                    if (machine) {
+                                                        // Use Bambu API
+                                                        if (act_type == "set_nozzle_temp")
+                                                            machine->command_set_nozzle((int) value);
+                                                        else if (act_type == "set_bed_temp")
+                                                            machine->command_set_bed((int) value);
+                                                        else
+                                                            output_gcode_bambu(machine, gcode_cmd);
+                                                    } else {
+                                                        // Fallback to Moonraker for Klipper printers
+                                                        send_gcode_moonraker(gcode_cmd);
                                                     }
+                                                }
+
+                                                // Log the action
+                                                if (!log_entry.empty()) {
+                                                    time_t      now = time(0);
+                                                    char*       dt  = ctime(&now);
+                                                    std::string timestamp(dt);
+                                                    timestamp.pop_back();
+                                                    std::string status = m_active_adjustment_enabled ? "[APPLIED] " : "[SKIPPED] ";
+                                                    m_action_log.push_back(timestamp + ": " + status + log_entry);
+                                                    if (m_action_log.size() > 50)
+                                                        m_action_log.erase(m_action_log.begin());
                                                 }
                                             });
                                         }

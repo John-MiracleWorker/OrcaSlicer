@@ -24,6 +24,10 @@ set(SLIC3R_GUI_SOURCES
     GUI/AboutDialog.hpp
     GUI/AICore.cpp
     GUI/AICore.hpp
+    GUI/AIMonitorDialog.cpp
+    GUI/AIMonitorDialog.hpp
+    GUI/AICommandCenterDialog.cpp
+    GUI/AICommandCenterDialog.hpp
     GUI/AIPrintMonitor.cpp
     GUI/AIPrintMonitor.hpp
     GUI/AIDiagnoseDialog.cpp

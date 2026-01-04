@@ -47,8 +47,10 @@
 #include "BindDialog.hpp"
 #include "../Utils/MacDarkMode.hpp"
 #include "AIDiagnoseDialog.hpp"
+#include "AIMonitorDialog.hpp"
 #include "AISupportDialog.hpp"
 #include "AITunerDialog.hpp"
+#include "AICommandCenterDialog.hpp"
 
 #include <fstream>
 #include <string_view>
@@ -3055,23 +3057,9 @@ void MainFrame::init_menubar_as_editor()
     // AI menu
     wxMenu* aiMenu = new wxMenu();
     append_menu_item(
-        aiMenu, wxID_ANY, _L("AI Settings Tuner"), _L("Optimize print settings using AI"),
+        aiMenu, wxID_ANY, _L("AI Command Center..."), _L("Unified AI tools for tuning, monitoring, and analysis"),
         [this](wxCommandEvent&) {
-            AITunerDialog dlg(this);
-            dlg.ShowModal();
-        },
-        "", nullptr);
-    append_menu_item(
-        aiMenu, wxID_ANY, _L("AI Failure Diagnosis"), _L("Diagnose print defects and suggest fixes"),
-        [this](wxCommandEvent&) {
-            AIDiagnoseDialog dlg(this);
-            dlg.ShowModal();
-        },
-        "", nullptr);
-    append_menu_item(
-        aiMenu, wxID_ANY, _L("AI Support Strategist"), _L("Optimize support settings for your model"),
-        [this](wxCommandEvent&) {
-            AISupportDialog dlg(this);
+            AICommandCenterDialog dlg(this);
             dlg.ShowModal();
         },
         "", nullptr);

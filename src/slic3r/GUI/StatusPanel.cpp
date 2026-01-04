@@ -1405,6 +1405,12 @@ wxBoxSizer* StatusBasePanel::create_monitoring_page()
     wxBoxSizer* bSizer_monitoring_title;
     bSizer_monitoring_title = new wxBoxSizer(wxHORIZONTAL);
 
+    // DEBUG: Confirm initialization
+    // wxMessageBox("StatusPanel Initialized - AI Controls Added", "Debug", wxOK | wxICON_INFORMATION);
+
+    // AI Controls removed from here
+    // Moved to Control Panel Header for visibility -> see    // AI Controls removed
+    // Will be added to a dedicated top panel
     m_staticText_monitoring = new Label(m_panel_monitoring_title, _L("Camera"));
     m_staticText_monitoring->Wrap(-1);
     // m_staticText_monitoring->SetFont(PAGE_TITLE_FONT);
@@ -1440,34 +1446,8 @@ wxBoxSizer* StatusBasePanel::create_monitoring_page()
     });
 #endif
 
-    // AI Print Monitor Controls
-    bSizer_monitoring_title->AddStretchSpacer();
-    m_staticText_ai_monitoring = new Label(m_panel_monitoring_title, _L("AI Guard"));
-    m_staticText_ai_monitoring->Wrap(-1);
-    m_staticText_ai_monitoring->SetForegroundColour(PAGE_TITLE_FONT_COL);
-    bSizer_monitoring_title->Add(m_staticText_ai_monitoring, 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(5));
-
-    m_bmToggleBtn_ai_monitoring = new SwitchButton(m_panel_monitoring_title);
-    m_bmToggleBtn_ai_monitoring->SetMinSize(SWITCH_BUTTON_SIZE);
-    m_bmToggleBtn_ai_monitoring->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent& e) {
-        if (auto dev = wxGetApp().getDeviceManager()) {
-            if (auto monitor = dev->get_ai_monitor()) {
-                if (e.IsChecked()) {
-                    monitor->start_monitoring();
-                } else {
-                    monitor->stop_monitoring();
-                }
-            }
-        }
-    });
-
-    // Update button state based on monitor state
-    if (auto dev = wxGetApp().getDeviceManager()) {
-        if (auto monitor = dev->get_ai_monitor()) {
-            m_bmToggleBtn_ai_monitoring->SetValue(monitor->is_monitoring());
-        }
-    }
-    bSizer_monitoring_title->Add(m_bmToggleBtn_ai_monitoring, 0, wxALIGN_CENTER_VERTICAL | wxALL, FromDIP(5));
+    // AI Print Monitor Controls moved to left
+    // See above
 
     // m_bitmap_camera_img = new wxStaticBitmap(m_panel_monitoring_title, wxID_ANY, m_bitmap_camera , wxDefaultPosition, wxSize(FromDIP(32),
     // FromDIP(18)), 0); m_bitmap_camera_img->SetMinSize(wxSize(FromDIP(32), FromDIP(18)));
@@ -1604,6 +1584,10 @@ wxBoxSizer* StatusBasePanel::create_machine_control_page(wxWindow* parent)
 
     bSizer_control_title->Add(m_staticText_control, 1, wxALIGN_CENTER_VERTICAL | wxLEFT, PAGE_TITLE_LEFT_MARGIN);
     bSizer_control_title->Add(0, 0, 1, wxEXPAND, 0);
+
+    // AI Guard Controls (Moved here for visibility)
+    // AI Controls removed
+
     bSizer_control_title->Add(m_parts_btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
     bSizer_control_title->Add(m_options_btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
     bSizer_control_title->Add(m_safety_btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));

@@ -31,6 +31,9 @@ public:
     // Generic analysis function
     void analyze_print_failure(const std::string& image_data, SuccessCallback on_success, ErrorCallback on_error);
 
+    // Text-only analysis (for model geometry, supports, etc.)
+    void analyze_text(const std::string& prompt, SuccessCallback on_success, ErrorCallback on_error);
+
     // Set API Key (can be called from UI or loaded from config)
     void set_api_key(const std::string& key) { m_api_key = key; }
 

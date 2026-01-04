@@ -416,9 +416,6 @@ protected:
     wxStaticText* m_staticText_timelapse;
     SwitchButton* m_bmToggleBtn_timelapse;
 
-    Label*        m_staticText_ai_monitoring;
-    SwitchButton* m_bmToggleBtn_ai_monitoring;
-
     wxStaticText* m_mqtt_source;
 
     wxStaticBitmap* m_bitmap_camera_img;
